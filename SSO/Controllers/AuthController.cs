@@ -108,26 +108,28 @@ namespace SSO.Controllers
             return Ok(new { message = "OTP verified successfully" });
         }
 
-        //[HttpPost("Login_Otp")]
-        //public async Task<IActionResult> Login_OTP([FromBody] Login_Otp model)
-        //{
-        //    var user = await FindByPhoneNumberAsync(model.PhoneNumber);
+        [HttpPost("Login_Otp")]
+        public async Task<IActionResult> Login_OTP([FromBody] Login_Otp model)
+        {
+            //Validation OTP whit OtpService
+            bool isValid = await _otpService.VerifyOtpAsync(model.PhoneNumber, model.Otp);
+            if (!isValid)
+            {
+                return BadRequest("OTP is invalid or expired.");
+            }
 
-        //    if (user == null)
-        //    {
-        //        return BadRequest("User not found");
-        //    }
+            //Find user by PhoneNumber
+            var user = await FindByPhoneNumberAsync(model.PhoneNumber);
+            if(user == null)
+            {
+                return NotFound("User not found.");
+            }
 
-        //    // تولید یک کد تصادفی ۶ رقمی
-        //    var otpCode = new Random().Next(100000, 999999).ToString();
+            //create jwt token
+            var token = GenerateJwtToken(user);
+            return Ok(new { token = token });
+        }
 
-        //    await _userManager.SetAuthenticationTokenAsync(user,"OTP","LoginCode",otpCode);
-
-        //    // TODO: سرویس ارسال پیامک
-
-        //    return Ok("OTP code sent.");
-        //}
-        
 
         #region Methods
         private string GenerateJwtToken(User user)
@@ -138,10 +140,10 @@ namespace SSO.Controllers
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    new Claim(ClaimTypes.NameIdentifier, user.Id),
-                    new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(ClaimTypes.Name, user.FullName)
-                }),
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.FullName ?? string.Empty)
+            }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };

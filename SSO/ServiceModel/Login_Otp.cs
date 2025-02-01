@@ -6,5 +6,8 @@ namespace SSO.ServiceModel
     {
         [Required]
         public string PhoneNumber { get; set; }
+
+        [Required]
+        public string Otp { get; set; }
     }
 }
