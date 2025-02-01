@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SSO.Database;
 using SSO.Entity;
+using SSO.Services;
+using StackExchange.Redis;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,9 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+//Add scop to services
+builder.Services.AddScoped<OtpService>();
 
 //Add Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -50,6 +55,10 @@ builder.Services.AddAuthentication(options =>
 //Controlers
 builder.Services.AddControllers()
     .AddNewtonsoftJson();
+
+//Redis for otp codes
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect("localhost:6379"));
 
 var app = builder.Build();
 

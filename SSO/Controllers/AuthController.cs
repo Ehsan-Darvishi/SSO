@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SSO.Entity;
 using SSO.ServiceModel;
+using SSO.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -16,12 +18,16 @@ namespace SSO.Controllers
         #region Properties
         private readonly UserManager<User> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly IUserStore<User> _userStore;
+        private readonly OtpService _otpService;
         #endregion
 
         #region Constructor
-        public AuthController(UserManager<User> userManager)
+        public AuthController(UserManager<User> userManager, IUserStore<User> userStore, OtpService otpService)
         {
             _userManager = userManager;
+            _userStore = userStore;
+            _otpService = otpService;
         }
         #endregion
 
@@ -81,40 +87,47 @@ namespace SSO.Controllers
             return Ok("Password reset link sent to your email.");
         }
 
-        [HttpPost("Login_Otp")]
-        public async Task<IActionResult> Login_OTP([FromBody] Login_Otp model)
+        [HttpPost("send_otp")]
+        public async Task<IActionResult> SendOtp([FromBody] string phoneNumber)
         {
-            var user = await _userManager.FindByNameAsync(model.PhoneNumber);
-
-            if (user == null)
-            {
-                return BadRequest("User not found");
-            }
-
-            // تولید یک کد تصادفی ۶ رقمی
-            var otpCode = new Random().Next(100000, 999999).ToString();
-
-            await _userManager.SetAuthenticationTokenAsync(user,"OTP","LoginCode",otpCode);
-
-            // TODO: سرویس ارسال پیامک
-
-            return Ok("OTP code sent.");
+            string otp = await _otpService.GenerateOtpAsync(phoneNumber);
+            //OTP را با سرویس پیامک ارسال کنید
+            return Ok(new { message = "OTP sent successfully" });
         }
 
         [HttpPost("verify-otp")]
         public async Task<IActionResult> VerifyOtp([FromBody] OtpVerifyRequest model)
         {
-            var user = await _userManager.FindByNameAsync(model.PhoneNumber);
-            if (user == null)
-                return BadRequest("User not found");
+            bool isValid = await _otpService.VerifyOtpAsync(model.PhoneNumber, model.Otp);
 
-            var storedOtp = await _userManager.GetAuthenticationTokenAsync(user, "OTP", "LoginCode");
-            if (storedOtp != model.OtpCode)
-                return Unauthorized("Invalid OTP");
+            if (!isValid)
+            {
+                return BadRequest("Invalid or expired OTP");
+            }
 
-            var token = GenerateJwtToken(user);
-            return Ok(new { token });
+            return Ok(new { message = "OTP verified successfully" });
         }
+
+        //[HttpPost("Login_Otp")]
+        //public async Task<IActionResult> Login_OTP([FromBody] Login_Otp model)
+        //{
+        //    var user = await FindByPhoneNumberAsync(model.PhoneNumber);
+
+        //    if (user == null)
+        //    {
+        //        return BadRequest("User not found");
+        //    }
+
+        //    // تولید یک کد تصادفی ۶ رقمی
+        //    var otpCode = new Random().Next(100000, 999999).ToString();
+
+        //    await _userManager.SetAuthenticationTokenAsync(user,"OTP","LoginCode",otpCode);
+
+        //    // TODO: سرویس ارسال پیامک
+
+        //    return Ok("OTP code sent.");
+        //}
+        
 
         #region Methods
         private string GenerateJwtToken(User user)
@@ -135,6 +148,17 @@ namespace SSO.Controllers
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
+
+        public async Task<User> FindByPhoneNumberAsync(string phoneNumber)
+        {
+            if (_userStore is IUserPhoneNumberStore<User> phoneNumberStore)
+            {
+                return await _userManager.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
+            }
+
+            throw new InvalidOperationException("User store does not support phone numbers.");
+        }
+
         #endregion Methods
     }
 }
